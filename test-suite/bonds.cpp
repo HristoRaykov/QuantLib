@@ -1824,6 +1824,63 @@ BOOST_AUTO_TEST_CASE(testBasisPointValue) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(testFixedRateBondYtmAtParWithDifferentValuationDates) {
+    BOOST_TEST_MESSAGE(
+        "Testing fixed-rate bond ytm equals coupon rate at par with different valuation dates...");
+    Calendar calendar = NullCalendar();
+    BusinessDayConvention convention = Unadjusted;
+    Compounding compounding = Compounded;
+    Frequency frequency = Semiannual;
+    Natural settlementDays = 0;
+    Rate coupon = 0.0600;
+    Real price = 100.0;
+    Real faceAmount = 100.0;
+    DayCounter dc = Thirty360(Thirty360::BondBasis);
+
+
+    std::vector<Date> dates(3);
+    dates[0] = Date(31, January, 2024);
+    dates[1] = Date(31, July, 2024);
+    dates[2] = Date(31, January, 2025);
+
+
+    Schedule schedule(dates, calendar, convention);
+
+    FixedRateBond bond(settlementDays, faceAmount, schedule, std::vector<Rate>(1, coupon), dc,
+                       convention, 100.0);
+
+    Date valDate = Date(10, December, 2024);
+    Settings::instance().evaluationDate() = valDate;
+    Real accruedAmnt = bond.accruedAmount();
+    auto y = InterestRate(coupon, dc, compounding, frequency);
+    auto cashFlows = bond.cashflows();
+    auto npv = CashFlows::npv(cashFlows, y, false, valDate, valDate);
+    auto p = price + accruedAmnt;
+    auto ytm = CashFlows::yield(cashFlows, p, dc, compounding, frequency, false, valDate, valDate);
+
+
+    Real tolerance = 1.0e-6;
+    Bond::Price bondPrice(price, Bond::Price::Clean);
+    std::vector<Date> valuationDates(4);
+    valuationDates[0] = Date(31, January, 2024);
+    valuationDates[1] = Date(31, May, 2024);
+    valuationDates[2] = Date(31, July, 2024);
+    valuationDates[3] = Date(10, December, 2024);
+
+    for (Date valuationDate : valuationDates) {
+        Settings::instance().evaluationDate() = valuationDate;
+        Real accruedAmnt = bond.accruedAmount();
+        Real ytm = bond.yield(bondPrice, dc, compounding, frequency);
+
+        if (std::fabs(ytm - coupon) > tolerance) {
+            BOOST_ERROR("\nYTM at par price "
+                        << std::fixed << ytm * 100 << " different from coupon rate " << coupon * 100
+                        << " at date " << valuationDate << " accrued amount " << accruedAmnt
+                        << ".");
+        }
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE_END()
